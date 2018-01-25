@@ -16,6 +16,7 @@ from configparser import ConfigParser
 from configparser import NoOptionError, NoSectionError
 from optparse import OptionParser
 import os, sys, random, csv
+import matplotlib.pyplot as plt
 
 class Experiment:
   """
@@ -42,9 +43,9 @@ class Experiment:
     self.name = self.config.get('Experiment', 'name')
     self.data_path = self.config.get('Experiment', 'path')
     self.swap_criteria = self.config.get('Experiment', 'staircase swap criteria')
-    staircase_count = self.config.getint('Experiment', 'staircase count')
+    self.staircase_count = self.config.getint('Experiment', 'staircase count')
 
-    for i in range(staircase_count):
+    for i in range(self.staircase_count):
       self.staircases.append(Staircase(self.config, i+1))
       self.open_staircases.append(self.staircases[-1])
 
@@ -72,6 +73,7 @@ class Experiment:
       else:
         break
     self.write_results()
+    self.produce_plot()
 
   def write_results(self):
     """
@@ -84,6 +86,19 @@ class Experiment:
       os.makedirs(base_dir)
     for s in self.staircases:
       s.write_results(base_dir, self.subject.name)
+
+  def produce_plot(self):
+    """
+    :return: None
+    Produces a plot of containing the results for each staircase
+    """
+    fig = plt.figure(figsize=(10, 5*self.staircase_count))
+    for i in range(self.staircase_count):
+      s = self.staircases[i]
+      subplot = fig.add_subplot(self.staircase_count, 1, i+1)
+      s.produce_plot(subplot)
+    fig.tight_layout()
+    fig.savefig('%s/%s_results.png' % (self.data_path, self.subject.name.replace(' ', '_')))
 
   def next_staircase(self, current_staircase=None):
     """
@@ -159,6 +174,29 @@ class Staircase:
       csv_writer.writerow(['Reference Weight', 'Test Weight', 'Ref Presented First', 'Correct'])
       for r in self.results:
         r.write_results(csv_writer)
+
+  def produce_plot(self, subplot):
+    """
+    :param subplot: The subplot to populate with the results
+    :return: None
+    Plots the Results Set on to the supplied subplot
+    """
+    subplot.set_ylabel('Test Sample (%s)' % self.units)
+    subplot.set_xlabel('Test Count')
+    last_result = None
+    for r in self.results:
+      if r.correct:
+        subplot.plot(r.sample_num + 1, r.test_sample, 'bo')
+      else:
+        subplot.plot(r.sample_num + 1, r.test_sample, 'rs')
+      if last_result is not None:
+        subplot.plot([r.sample_num + 1, last_result.sample_num + 1], [r.test_sample, last_result.test_sample], 'k-')
+      last_result = r
+    if self.start_value < self.target:
+      subplot.set_ylim(self.start_value, self.target)
+    else:
+      subplot.set_ylim(self.target, self.start_value)
+    subplot.set_xlim(1, len(self.results))
 
   def get_next_sample(self, last_correct):
     """
