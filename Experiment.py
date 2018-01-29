@@ -98,7 +98,7 @@ class Experiment:
       subplot = fig.add_subplot(self.staircase_count, 1, i+1)
       s.produce_plot(subplot)
     fig.tight_layout()
-    fig.savefig('%s/%s_results.png' % (self.data_path, self.subject.name.replace(' ', '_')))
+    fig.savefig('%s/%s/%s_results.png' % (self.data_path, self.subject.name.replace(' ', '_'), self.subject.name.replace(' ', '_')))
 
   def next_staircase(self, current_staircase=None):
     """
@@ -155,7 +155,8 @@ class Staircase:
     self.test_count = 0
     self.reversal_count = 0
     self.results = []
-    self.previous_correct = None
+    self.current_direction = 'closer'
+    self.last_sample = None
 
     if self.target < self.start_value:
       self.harder_step *= -1
@@ -186,9 +187,15 @@ class Staircase:
     last_result = None
     for r in self.results:
       if r.correct:
-        subplot.plot(r.sample_num + 1, r.test_sample, 'bo')
+        if ( r.reversal ):
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ks')
+        else:
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ko')
       else:
-        subplot.plot(r.sample_num + 1, r.test_sample, 'rs')
+        if (r.reversal):
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ks', markerfacecolor='w')
+        else:
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ko', markerfacecolor='w')
       if last_result is not None:
         subplot.plot([r.sample_num + 1, last_result.sample_num + 1], [r.test_sample, last_result.test_sample], 'k-')
       last_result = r
@@ -204,20 +211,33 @@ class Staircase:
     :return: None
     Updates the status of the staircase based on the previous result
     """
+    direction = None
+    return_value = [False, False]
     if last_correct:
       self.correct_count += 1
       if self.initial_setup == 'Y' and self.reversal_count == 0:
         self.calc_next_sample('closer')
+        direction = 'closer'
+        return_value[1] = True
       elif self.correct_count == self.correct_reverse_count:
         # Resets the Correct Count due to meeting the criteria to increase the difficulty of the test
         self.calc_next_sample('closer')
+        direction = 'closer'
+        return_value[1] = True
         self.correct_count = 0
     else:
       self.calc_next_sample('further')
+      direction = 'further'
+      return_value[1] = True
       self.correct_count = 0
-    if self.previous_correct is not None and self.previous_correct != last_correct:
+    if self.last_sample is not None and self.last_sample != self.current_sample and self.current_direction != direction:
       self.reversal_count += 1
+      return_value[0] = True
     self.previous_correct = last_correct
+    if self.last_sample != self.current_sample and self.current_direction != direction:
+      self.current_direction = direction
+    self.last_sample = self.current_sample
+    return return_value
 
   def calc_next_sample(self, direction):
     """
@@ -257,10 +277,9 @@ class Staircase:
       return selected_choice
 
     correct = self.check_correct(selected_choice, self.target, self.current_sample)
-    self.results.append(ResultSet(self.target, self.current_sample, choice1, self.test_count, correct))
+    self.results.append(ResultSet(self.target, self.current_sample, choice1, self.test_count, correct, self.get_next_sample(correct)))
     self.test_count += 1
 
-    self.get_next_sample(correct)
     self.determine_is_finished()
     return True
 
@@ -405,12 +424,14 @@ class ResultSet:
   Holds the result from a Test. Stores the Target, Test Sample, which was presented first, Test Number and
   whether the subject answered correctly
   """
-  def __init__(self, target, test_sample, presented_first, sample_num, correct):
+  def __init__(self, target, test_sample, presented_first, sample_num, correct, next_sample_data=None):
     self.target = target
     self.test_sample = test_sample
     self.presented_first = presented_first
     self.sample_num = sample_num
     self.correct = correct
+    self.reversal = next_sample_data[0]
+    self.test_sample_change = next_sample_data[1]
 
   def write_results(self, csv_writer):
     """
