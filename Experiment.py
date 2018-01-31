@@ -121,7 +121,7 @@ class Experiment:
         current_index = self.open_staircases.index(current_staircase)
       except ValueError:
         return self.open_staircases[0]
-      if current_index == len(self.open_staircases):
+      if current_index+1 >= len(self.open_staircases):
         return self.open_staircases[0]
       else:
         return self.open_staircases[current_index+1]
