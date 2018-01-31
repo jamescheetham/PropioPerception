@@ -32,8 +32,8 @@ class Experiment:
     self.swap_criteria = ''
     self.staircases = []
     self.open_staircases = []
-    self.subject = Subject()
     self.process_config()
+    self.subject = Subject(self.data_path)
 
   def process_config(self):
     """
@@ -203,7 +203,10 @@ class Staircase:
       subplot.set_ylim(self.start_value, self.target)
     else:
       subplot.set_ylim(self.target, self.start_value)
-    subplot.set_xlim(1, len(self.results))
+    if len(self.results) == 1:
+      subplot.set_xlim(1, 2)
+    else:
+      subplot.set_xlim(1, len(self.results))
 
   def get_next_sample(self, last_correct):
     """
@@ -416,8 +419,12 @@ class Subject:
   """
   Class to hold the subjects detail.
   """
-  def __init__(self):
-    self.name = input('Please enter a Subject identifier: ')
+  def __init__(self, data_path):
+    while True:
+      self.name = input('Please enter a Subject identifier: ')
+      if not os.path.exists('%s/%s' % (data_path, self.name.replace(' ', '_'))):
+        break
+      print('There is already a Data Directory for this Subject Identifier')
 
 class ResultSet:
   """
