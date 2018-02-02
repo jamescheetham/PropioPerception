@@ -448,7 +448,7 @@ class ResultSet:
               int(self.test_sample) if self.test_sample.is_integer() else self.test_sample,
               1 if self.presented_first == self.target else 2,
               'Y' if self.correct else 'N',
-              1 if self.reversal else '0']
+              1 if self.reversal else 0]
     csv_writer.writerow(output)
 
   def __str__(self):
