@@ -172,7 +172,7 @@ class Staircase:
     file_name = '%s/%s_%s_results.csv' % (path, subject_name.replace(' ', '_'), self.name.replace(' ', '_'))
     with open(file_name, 'w') as f:
       csv_writer = csv.writer(f, delimiter=',', quotechar='"')
-      csv_writer.writerow(['Reference Weight', 'Test Weight', 'Ref Presented First', 'Correct'])
+      csv_writer.writerow(['Reference Weight', 'Test Weight', 'Ref Presented First', 'Correct', 'Reversal'])
       for r in self.results:
         r.write_results(csv_writer)
 
@@ -188,25 +188,23 @@ class Staircase:
     for r in self.results:
       if r.correct:
         if ( r.reversal ):
-          subplot.plot(r.sample_num + 1, r.test_sample, 'ks')
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ks', markersize=6)
         else:
-          subplot.plot(r.sample_num + 1, r.test_sample, 'ko')
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ko', markersize=6)
       else:
         if (r.reversal):
-          subplot.plot(r.sample_num + 1, r.test_sample, 'ks', markerfacecolor='w')
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ks', markerfacecolor='w', markersize=6)
         else:
-          subplot.plot(r.sample_num + 1, r.test_sample, 'ko', markerfacecolor='w')
+          subplot.plot(r.sample_num + 1, r.test_sample, 'ko', markerfacecolor='w', markersize=6)
       if last_result is not None:
         subplot.plot([r.sample_num + 1, last_result.sample_num + 1], [r.test_sample, last_result.test_sample], 'k-')
       last_result = r
     if self.start_value < self.target:
-      subplot.set_ylim(self.start_value, self.target)
+      subplot.set_ylim(self.start_value-10, self.target+10)
     else:
-      subplot.set_ylim(self.target, self.start_value)
-    if len(self.results) == 1:
-      subplot.set_xlim(1, 2)
-    else:
-      subplot.set_xlim(1, len(self.results))
+      subplot.set_ylim(self.target-10, self.start_value+10)
+    subplot.set_xlim(1, len(self.results) + 1)
+    subplot.locator_params('x', None, integer=True)
 
   def get_next_sample(self, last_correct):
     """
@@ -449,7 +447,8 @@ class ResultSet:
     output = [int(self.target) if self.target.is_integer else self.target,
               int(self.test_sample) if self.test_sample.is_integer() else self.test_sample,
               1 if self.presented_first == self.target else 2,
-              'Y' if self.correct else 'N']
+              'Y' if self.correct else 'N',
+              1 if self.reversal else '0']
     csv_writer.writerow(output)
 
   def __str__(self):
