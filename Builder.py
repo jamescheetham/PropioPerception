@@ -61,7 +61,11 @@ def main():
   if save_path[-1] == '/':
     ini_filename = '%s/%s.ini' % (os.path.dirname(save_path[:-1]), ini_file)
   else:
-    ini_filename = '%s/%s.ini' % (os.path.dirname(save_path), ini_file)
+    if '/' not in save_path:
+      ini_filename = '%s/%s.ini' % (os.getcwd(), ini_file)
+      save_path = '%s/%s' % (os.getcwd(), save_path)
+    else:
+      ini_filename = '%s/%s.ini' % (os.path.dirname(save_path), ini_file)
   config.set('Experiment', 'Path', save_path)
   while True:
     tmp_input = input_prompt('Number of Staircases')
