@@ -17,6 +17,7 @@ from configparser import NoOptionError, NoSectionError
 from optparse import OptionParser
 import os, sys, random, csv
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 class Experiment:
   """
@@ -32,8 +33,10 @@ class Experiment:
     self.swap_criteria = ''
     self.staircases = []
     self.open_staircases = []
+    self.end_time = None
     self.process_config()
     self.subject = Subject(self.data_path)
+    self.start_time = datetime.now()
 
   def process_config(self):
     """
@@ -72,6 +75,7 @@ class Experiment:
         old_staircase.backtrack()
       else:
         break
+    self.end_time = datetime.now()
     self.write_results()
     self.produce_plot()
 
@@ -85,7 +89,7 @@ class Experiment:
     if not os.path.isdir(base_dir):
       os.makedirs(base_dir)
     for s in self.staircases:
-      s.write_results(base_dir, self.subject.name)
+      s.write_results(base_dir, self.subject.name, self.start_time, self.end_time)
 
   def produce_plot(self):
     """
@@ -162,7 +166,7 @@ class Staircase:
       self.harder_step *= -1
       self.easier_step *= -1
 
-  def write_results(self, path, subject_name):
+  def write_results(self, path, subject_name, expr_start_time, expr_end_time):
     """
     :param path: The directory to write the file to
     :param subject_name: The name of the test subject
@@ -175,6 +179,11 @@ class Staircase:
       csv_writer.writerow(['Reference Weight', 'Test Weight', 'Ref Presented First', 'Correct', 'Reversal'])
       for r in self.results:
         r.write_results(csv_writer)
+      csv_writer.writerow([])
+      csv_writer.writerow(['Start Time', expr_start_time.strftime('%H:%M:%S'), expr_start_time.strftime('%d/%m/%Y')])
+      csv_writer.writerow(['End Time', expr_end_time.strftime('%H:%M:%S'), expr_end_time.strftime('%d/%m/%Y')])
+      run_time = expr_end_time - expr_start_time
+      csv_writer.writerow(['Experiment Time (min)', '%d:%02d' % (run_time.seconds/60, run_time.seconds%60)])
 
   def produce_plot(self, subplot):
     """
