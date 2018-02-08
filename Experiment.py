@@ -34,9 +34,11 @@ class Experiment:
     self.staircases = []
     self.open_staircases = []
     self.end_time = None
+    self.staircase_count = 0
     self.process_config()
     self.subject = Subject(self.data_path)
     self.start_time = datetime.now()
+    self.last_staircase = None
 
   def process_config(self):
     """
@@ -58,10 +60,10 @@ class Experiment:
     Runs the Experiment, it will continue until all of the supplied staircases
     """
     current_staircase = None
-    while len(self.open_staircases) > 0:
-      old_staircase = current_staircase
+    while self.has_open_staircases():
+      self.last_staircase = current_staircase
       current_staircase = self.next_staircase(current_staircase)
-      result = current_staircase.run(old_staircase is not None)
+      result = current_staircase.run(self.last_staircase is not None)
       # Staircase.run returns True or False if the correct sample was chosen, 'Backtrack' to reanswer
       # the old question, or 'q' if the operator wants to stop the Experiment
       if result == True:
@@ -69,13 +71,33 @@ class Experiment:
           self.open_staircases.remove(current_staircase)
       elif result == 'Backtrack':
         # Backtrack is a special option that allows the previous answer to be reselected
-        if old_staircase.is_finished:
-          old_staircase.is_finished = False
-          self.open_staircases.append(old_staircase)
-        old_staircase.backtrack()
+        self.undo_last_answer()
       else:
         break
     self.end_time = datetime.now()
+
+  def has_open_staircases(self):
+    """
+    Checks to see if there are currently open staircases
+    :return: Boolean
+    """
+    return len(self.open_staircases) > 0
+
+  def undo_last_answer(self):
+    """
+    Will undo the last answer and present a backtrack option
+    :return:
+    """
+    if self.last_staircase.is_finished:
+      self.last_staircase.is_finished = False
+      self.open_staircases.append(self.last_staircase)
+    self.last_staircase.backtrack()
+
+  def finish_experiement(self):
+    """
+    Writes the results to disk and produces a plot of the answer
+    :return:
+    """
     self.write_results()
     self.produce_plot()
 
@@ -159,7 +181,7 @@ class Staircase:
     self.test_count = 0
     self.reversal_count = 0
     self.results = []
-    self.current_direction = 'closer'
+    self.current_direction = None
     self.last_sample = None
 
     if self.target < self.start_value:
@@ -170,6 +192,8 @@ class Staircase:
     """
     :param path: The directory to write the file to
     :param subject_name: The name of the test subject
+    :param expr_start_time: The time that the experiement was started
+    :param expr_end_time: The time that the experiment was concluded
     :return: None
     Writes the restult set to the results file
     """
@@ -196,12 +220,12 @@ class Staircase:
     last_result = None
     for r in self.results:
       if r.correct:
-        if ( r.reversal ):
+        if r.reversal:
           subplot.plot(r.sample_num + 1, r.test_sample, 'ks', markersize=6)
         else:
           subplot.plot(r.sample_num + 1, r.test_sample, 'ko', markersize=6)
       else:
-        if (r.reversal):
+        if r.reversal:
           subplot.plot(r.sample_num + 1, r.test_sample, 'ks', markerfacecolor='w', markersize=6)
         else:
           subplot.plot(r.sample_num + 1, r.test_sample, 'ko', markerfacecolor='w', markersize=6)
@@ -218,7 +242,7 @@ class Staircase:
   def get_next_sample(self, last_correct):
     """
     :param last_correct: Boolean, status of the last Test
-    :return: None
+    :return: return_value: tuple of booleans [0] whether a reversal occured, [1] whether the test sample changed
     Updates the status of the staircase based on the previous result
     """
     direction = None
@@ -236,15 +260,16 @@ class Staircase:
         return_value[1] = True
         self.correct_count = 0
     else:
+      if self.test_count == 0 and self.initial_setup == 'Y':
+        self.initial_setup = 'N'
       self.calc_next_sample('further')
       direction = 'further'
       return_value[1] = True
       self.correct_count = 0
-    if self.last_sample is not None and self.last_sample != self.current_sample and self.current_direction != direction:
+    if self.last_sample is not None and self.last_sample != self.current_sample and self.current_direction is not None and self.current_direction != direction:
       self.reversal_count += 1
       return_value[0] = True
-    self.previous_correct = last_correct
-    if self.last_sample != self.current_sample and self.current_direction != direction:
+    if self.current_direction is None or (self.last_sample != self.current_sample and self.current_direction != direction):
       self.current_direction = direction
     self.last_sample = self.current_sample
     return return_value
@@ -262,12 +287,12 @@ class Staircase:
 
     # If the current_sample is beyond the initial value, or is the same as the reference sample
     # Then it will set the current_sample to those values accordingly.
-    if self.start_value < self.target and self.current_sample >= self.target:
+    if self.start_value < self.target <= self.current_sample:
       self.current_sample = self.target - abs(self.harder_step)
-    elif self.start_value > self.target and self.current_sample <= self.target:
+    elif self.start_value > self.target >= self.current_sample:
       self.current_sample = self.target + abs(self.harder_step)
-    elif (self.start_value < self.target and self.current_sample < self.start_value) or \
-      (self.start_value > self.target and self.current_sample > self.start_value):
+    elif (self.target > self.start_value > self.current_sample) or \
+            (self.target < self.start_value < self.current_sample):
       self.current_sample = self.start_value
 
   def run(self, allow_backtrack=True):
@@ -287,7 +312,7 @@ class Staircase:
       return selected_choice
 
     correct = self.check_correct(selected_choice, self.target, self.current_sample)
-    self.results.append(ResultSet(self.target, self.current_sample, choice1, self.test_count, correct, self.get_next_sample(correct)))
+    self.results.append(ResultSet(self.target, self.current_sample, choice1, self.test_count, correct, self.current_direction, self.get_next_sample(correct)))
     self.test_count += 1
 
     self.determine_is_finished()
@@ -337,7 +362,8 @@ class Staircase:
     else:
       return choice2
 
-  def check_correct(self, selected_choice, target, sample):
+  @staticmethod
+  def check_correct(selected_choice, target, sample):
     """
     :param selected_choice: The chosen value
     :param target: The Target Value
@@ -379,34 +405,44 @@ class Staircase:
     self.results.pop()
 
     new_result = ResultSet(self.target, last_result.test_sample, choice1, last_result.sample_num, correct)
-    if last_result.correct and not new_result.correct:
-      # If it was previously answered correctly, but should have been incorrect, lower the correct_count
-      self.correct_count -= 1
-    elif not last_result.correct and new_result.correct:
-      # If the previous answer selected incorrect, but it should have been correct, it is necessary to recalculate
+    if last_result.correct != new_result.correct:
+      # If the previous answer differs from the new answer it is necessary to recalculate
       # The current position by reprocessing all of the previous answers
       correct_count = 0
       reversal_count = 0
-      last_status = None
+      last_sample = 0
       for r in self.results:
-        if last_status is not None and last_status != r.correct:
+        # Loop through existing results to recalculate the current position with the new answer
+        last_sample = r.test_sample
+        if r.reversal:
           reversal_count += 1
         if r.correct:
           correct_count += 1
           if (self.initial_setup != 'Y' or reversal_count != 0) and correct_count == self.correct_reverse_count:
+            # Reset correct_count if the subject has met the criteria to increase difficulty
             correct_count = 0
         else:
+          # subject answered incorrectly, reset the correct_count
           correct_count = 0
-        last_status = r.correct
+      # Reset the correct_count and reversal_count for the staircase
       self.correct_count = correct_count
       self.reversal_count = reversal_count
+      self.last_sample = last_sample
     else:
       self.results.append(last_result)
       return
     # Update the state of the staircase with the new information
-    self.previous_correct = correct
+    if last_result.sample_num == 0:
+      self.initial_setup = self.run_initial_setup
+    self.current_direction = last_result.current_direction
     self.current_sample = last_result.test_sample
-    self.get_next_sample(correct)
+    self.test_count = last_result.sample_num
+    self.last_sample = last_result.test_sample
+    new_result_data = self.get_next_sample(correct)
+    self.test_count += 1
+    new_result.reversal = new_result_data[0]
+    new_result.test_sample_change = new_result_data[1]
+    new_result.current_direction = self.current_direction
     self.determine_is_finished()
     self.results.append(new_result)
 
@@ -421,12 +457,16 @@ class Staircase:
   def __eq__(self, other):
     return self.name == other.name
 
-
 class Subject:
   """
   Class to hold the subjects detail.
   """
   def __init__(self, data_path):
+    """
+    Prompts the operator for an identifier for the current test subject. The name must not exist as an existing folder
+    under the data_path directory
+    :param data_path: the base path to save the subjects data in
+    """
     while True:
       self.name = input('Please enter a Subject identifier: ')
       if not os.path.exists('%s/%s' % (data_path, self.name.replace(' ', '_'))):
@@ -438,14 +478,16 @@ class ResultSet:
   Holds the result from a Test. Stores the Target, Test Sample, which was presented first, Test Number and
   whether the subject answered correctly
   """
-  def __init__(self, target, test_sample, presented_first, sample_num, correct, next_sample_data=None):
+  def __init__(self, target, test_sample, presented_first, sample_num, correct, current_direction=None, next_sample_data=None):
     self.target = target
     self.test_sample = test_sample
     self.presented_first = presented_first
     self.sample_num = sample_num
     self.correct = correct
-    self.reversal = next_sample_data[0]
-    self.test_sample_change = next_sample_data[1]
+    self.current_direction = current_direction
+    if next_sample_data is not None:
+      self.reversal = next_sample_data[0]
+      self.test_sample_change = next_sample_data[1]
 
   def write_results(self, csv_writer):
     """
@@ -485,7 +527,12 @@ def main():
   except (NoOptionError, NoSectionError):
     print('There was a problem processing the Config File')
     sys.exit(1)
-  exp.run()
+  while exp.has_open_staircases():
+    exp.run()
+    answer = input('Do you wish to end the Experiement? [Y/n] ')
+    if answer.lower() == 'n':
+      exp.undo_last_answer()
+  exp.finish_experiement()
 
 if __name__ == '__main__':
   main()
