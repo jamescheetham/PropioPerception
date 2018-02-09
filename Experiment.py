@@ -56,7 +56,7 @@ class Experiment:
 
   def run(self):
     """
-    :return: None
+    :return: Boolean: True if the experiement completed normally, False if the user terminated it early
     Runs the Experiment, it will continue until all of the supplied staircases
     """
     current_staircase = None
@@ -73,8 +73,13 @@ class Experiment:
         # Backtrack is a special option that allows the previous answer to be reselected
         self.undo_last_answer()
       else:
-        break
+        for s in self.open_staircases:
+          s.is_finished = True
+        self.open_staircases = []
+        self.end_time = datetime.now()
+        return False
     self.end_time = datetime.now()
+    return True
 
   def has_open_staircases(self):
     """
@@ -111,7 +116,7 @@ class Experiment:
     if not os.path.isdir(base_dir):
       os.makedirs(base_dir)
     for s in self.staircases:
-      s.write_results(base_dir, self.subject.name, self.start_time, self.end_time)
+      s.write_results(base_dir, self.subject.name, self.start_time, self.end_time, self.config)
 
   def produce_plot(self):
     """
@@ -188,7 +193,7 @@ class Staircase:
       self.harder_step *= -1
       self.easier_step *= -1
 
-  def write_results(self, path, subject_name, expr_start_time, expr_end_time):
+  def write_results(self, path, subject_name, expr_start_time, expr_end_time, config):
     """
     :param path: The directory to write the file to
     :param subject_name: The name of the test subject
@@ -208,6 +213,13 @@ class Staircase:
       csv_writer.writerow(['End Time', expr_end_time.strftime('%H:%M:%S'), expr_end_time.strftime('%d/%m/%Y')])
       run_time = expr_end_time - expr_start_time
       csv_writer.writerow(['Experiment Time (min)', '%d:%02d' % (run_time.seconds/60, run_time.seconds%60)])
+      csv_writer.writerow([])
+      csv_writer.writerow(['Config'])
+      for s in ['Experiment', 'Staircase Default', self.name]:
+        csv_writer.writerow([s])
+        for o in config.options(s):
+          csv_writer.writerow([o, config.get(s, o)])
+        csv_writer.writerow([])
 
   def produce_plot(self, subplot):
     """
@@ -306,10 +318,17 @@ class Staircase:
     choice1 = random.choice(choices)
     choice2 = choices[0] if choices.index(choice1) == 1 else choices[1]
     self.present_choices(choice1, choice2)
-    selected_choice = self.read_choice(choice1, choice2, allow_backtrack)
-
-    if selected_choice not in choices:
-      return selected_choice
+    while True:
+      selected_choice = self.read_choice(choice1, choice2, allow_backtrack)
+      if selected_choice in choices:
+        break
+      else:
+        if selected_choice == False:
+          answer = input('Do you wish to Terminate the Experiement early and write the results to disk? [y/N] ')
+          if answer.lower() == 'y':
+            return selected_choice
+        else:
+          return selected_choice
 
     correct = self.check_correct(selected_choice, self.target, self.current_sample)
     self.results.append(ResultSet(self.target, self.current_sample, choice1, self.test_count, correct, self.current_direction, self.get_next_sample(correct)))
@@ -528,10 +547,10 @@ def main():
     print('There was a problem processing the Config File')
     sys.exit(1)
   while exp.has_open_staircases():
-    exp.run()
-    answer = input('Do you wish to end the Experiement? [Y/n] ')
-    if answer.lower() == 'n':
-      exp.undo_last_answer()
+    if exp.run():
+      answer = input('Do you wish to end the Experiement? [Y/n] ')
+      if answer.lower() == 'n':
+        exp.undo_last_answer()
   exp.finish_experiement()
 
 if __name__ == '__main__':
